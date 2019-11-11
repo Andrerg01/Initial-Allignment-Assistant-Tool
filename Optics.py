@@ -170,15 +170,18 @@ class Beam:
             #Applying formula for intersection between line and sphere.
             intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
             #Intersection function will return None if there is no internsection
-        elif isinstance(element, FlatMirror):
+        elif isinstance(element, FlatMirror) or isinstance(element, InfinitePlane):
             intersection = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex(), element.normal())
+        
         if intersection is None:
             return False
         #Makes sure the intersection point is withing the diameter of the element (not considering spherical caps here), and makes sure it is in front of the beam's path, not behind.
-        elif norm(intersection - element.vertex1()) <= element.diameter/2.0 and self.direction.dot(intersection - self.position) >= 0:
+        if isinstance(element, InfinitePlane):
             return True
-        else:
-            return False
+        if norm(intersection - element.vertex1()) <= element.diameter/2.0 and self.direction.dot(intersection - self.position) >= 0:
+            return True
+            
+        return False
         
     #Returns True of False if the beam will eventually collide with the optical element
     #This works for both lenses and mirrors    
@@ -192,7 +195,7 @@ class Beam:
         if intersection is None:
             return False
         #Makes sure the intersection point is withing the diameter of the element (not considering spherical caps here), and makes sure it is in front of the beam's path, not behind.
-        elif norm(intersection - element.vertex1()) <= element.diameter/2 and self.direction.dot(intersection - self.position) >= 0:
+        if isinstance(element, InfinitePlane) or norm(intersection - element.vertex1()) <= element.diameter/2 and self.direction.dot(intersection - self.position) >= 0:
             return intersection
         else:
             return None
@@ -218,8 +221,11 @@ class Beam:
                 self.refract(element)
             elif isinstance(element, FlatMirror):
                 self.reflect(element.normal())
+            elif isinstance(element, InfinitePlane):
+                self.reflect(element.normal())
         else:
             if self.verbose: print("Cannot interact with element " + str(element.ID) + ", no collision detected!")
+            self.interact(InfinitePlane(element.ID, element.vertex1(), element.yaw, element.pitch))
                 
     def track(self, elements, step):
         beam = self.copy()
@@ -445,18 +451,18 @@ class InfinitePlane:
         self.pitch = pitch
         #Yaw of the flat mirror from (1,0,0) (yaw = axymuthal rotation)
         self.yaw = yaw
-        def normal(self):
-            return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
-        def vertex1(self):
-            return self.positionOfCM
-        def vertex(self):
-            return self.vertex1()
-        def copy(self):
-            return InfinitePlane(ID = self.ID, positionOfCM = self.positionOfCM, yaw = self.yaw, pitch = self.pitch)
-        def __str__(self):
-            return \
-            "ID : " + str(self.ID) + "\n" + \
-            "Position of Center of Mass : " + str(self.positionOfCM) + "\n" + \
-            "yaw : " + str(self.yaw) + "\n" + \
-            "Pitch : " + str(self.pitch) + "\n" + \
-            "Normal : " + str(self.normal()) + "\n"
+    def normal(self):
+        return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
+    def vertex1(self):
+        return self.positionOfCM
+    def vertex(self):
+        return self.vertex1()
+    def copy(self):
+        return InfinitePlane(ID = self.ID, positionOfCM = self.positionOfCM, yaw = self.yaw, pitch = self.pitch)
+    def __str__(self):
+        return \
+        "ID : " + str(self.ID) + "\n" + \
+        "Position of Center of Mass : " + str(self.positionOfCM) + "\n" + \
+        "yaw : " + str(self.yaw) + "\n" + \
+        "Pitch : " + str(self.pitch) + "\n" + \
+        "Normal : " + str(self.normal()) + "\n"
