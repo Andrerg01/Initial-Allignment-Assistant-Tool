@@ -76,6 +76,20 @@ def intersectionBetweenLineAndSphere(directionOfLine, pointInLine, centerOfSpher
     else:
         return None
 
+def intersectionBetweenLineAndPlane(directionOfLine, pointInLine, pointInPlane, normalOfPlane):
+    p = pointInPlane
+    n = normalOfPlane
+    l = directionOfLine
+    o = pointInLine
+    if l.dot(n) != 0:
+        d = (p - o).dot(n)/(l.dot(n))
+        intersection = o + d*l
+    elif (p-o).dot(n) == 0:
+        intersection = o
+    else:
+        intersection = None
+    return intersection
+        
 #Class used for the propagation of a Gaussian Beam    
 class Beam:
     #Initialization of the class    
@@ -152,9 +166,12 @@ class Beam:
     #Returns True of False if the beam will eventually collide with the optical element
     #This works for both lenses and mirrors    
     def collisionQ(self, element):
-        #Applying formula for intersection between line and sphere.
-        intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
-        #Intersection function will return None if there is no internsection
+        if isinstance(element, Mirror) or isinstance(element, Lens):
+            #Applying formula for intersection between line and sphere.
+            intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
+            #Intersection function will return None if there is no internsection
+        elif isinstance(element, FlatMirror):
+            intersection = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex(), element.normal())
         if intersection is None:
             return False
         #Makes sure the intersection point is withing the diameter of the element (not considering spherical caps here), and makes sure it is in front of the beam's path, not behind.
@@ -166,9 +183,12 @@ class Beam:
     #Returns True of False if the beam will eventually collide with the optical element
     #This works for both lenses and mirrors    
     def collisionPoint(self, element):
-        #Applying formula for intersection between line and sphere.
-        intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
-        #Intersection function will return None if there is no internsection
+        if isinstance(element, Mirror) or isinstance(element, Lens):
+            #Applying formula for intersection between line and sphere.
+            intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
+            #Intersection function will return None if there is no internsection
+        elif isinstance(element, FlatMirror) or isinstance(element, InfinitePlane) or isinstance(element, Aperture):
+            intersection = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex(), element.normal())
         if intersection is None:
             return False
         #Makes sure the intersection point is withing the diameter of the element (not considering spherical caps here), and makes sure it is in front of the beam's path, not behind.
@@ -196,8 +216,8 @@ class Beam:
                 self.width = self.widthFrom_q(q)
             elif isinstance(element, Lens):
                 self.refract(element)
-            else:
-                if self.verbose: print("Unknown type of element")
+            elif isinstance(element, FlatMirror):
+                self.reflect(element.normal())
         else:
             if self.verbose: print("Cannot interact with element " + str(element.ID) + ", no collision detected!")
                 
@@ -299,6 +319,38 @@ class Mirror:
         "Normal : " + str(self.normal()) + "\n" + \
         "Diameter : " + str(self.diameter) + "\n"    
 
+class FlatMirror:
+    def __init__(self, ID, positionOfCM, parameter_d, yaw, pitch, diameter):
+        #ID of the flat mirror
+        self.ID = ID
+        #Position of the center of mass for which the flat mirror will rotate about for pitch and yaw adjustments
+        self.positionOfCM = positionOfCM
+        #Distance between the vertex (surface) of the flat mirror and the center of mass
+        self.parameter_d = parameter_d
+        #Pitch of the flat mirror from (1,0,0) (pitch = polar rotation).
+        self.pitch = pitch
+        #Yaw of the flat mirror from (1,0,0) (yaw = axymuthal rotation)
+        self.yaw = yaw
+        #Diameter of the Lens
+        self.diameter = diameter
+    def normal(self):
+        return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
+    def vertex1(self):
+        return self.positionOfCM + self.parameter_d*self.normal()
+    def vertex(self):
+        return self.vertex1()
+    def copy(self):
+        return FlatMirror(ID = self.ID, positionOfCM = self.positionOfCM, parameter_d = self.parameter_d, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter)
+    def __str__(self):
+        return \
+        "ID : " + str(self.ID) + "\n" + \
+        "Position of Center of Mass : " + str(self.positionOfCM) + "\n" + \
+        "Parameter_d : " + str(self.parameter_d) + "\n" + \
+        "yaw : " + str(self.yaw) + "\n" + \
+        "Pitch : " + str(self.pitch) + "\n" + \
+        "Normal : " + str(self.normal()) + "\n" + \
+        "Diameter : " + str(self.diameter) + "\n"
+    
 class Lens:
     def __init__(self, ID, radiusOfCurvature, positionOfCM, parameter_d, yaw, pitch, diameter, indexOfRefraction):
         #ID of the lens (for identification)
@@ -307,13 +359,13 @@ class Lens:
         self.radiusOfCurvature = radiusOfCurvature
         #Position of the center of mass for which the lens will rotate about for pitch and yaw adjustments.
         self.positionOfCM = np.array(positionOfCM)
-        #distance between the vertex of the lens and the center of mass
+        #Distance between the vertex of the lens and the center of mass
         self.parameter_d = parameter_d
         #Pitch of the lens from (1,0,0) (pitch = polar rotation).
         self.pitch = pitch
         #Yaw of the lens from (1,0,0) (yaw = axymuthal rotation)
         self.yaw = yaw
-        #Diameter of the mirror
+        #Diameter of the Lens
         self.diameter = diameter
         #Index of refraction inside the lens.
         self.indexOfRefraction = indexOfRefraction
@@ -339,7 +391,7 @@ class Lens:
     
     #Returns a copy of the mirror state as it is when the function is called
     def copy(self):
-        return Mirror(ID = self.ID, radiusOfCurvature = self.radiusOfCurvature, positionOfCM = self.positionOfCM, parameter_d = self.parameter_d, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter, indexOfRefraction = self.indexOfRefraction)
+        return Lens(ID = self.ID, radiusOfCurvature = self.radiusOfCurvature, positionOfCM = self.positionOfCM, parameter_d = self.parameter_d, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter, indexOfRefraction = self.indexOfRefraction)
  
     #Nicely prints all the attributes of the mirror at the moment the function is called
     def __str__(self):
@@ -353,3 +405,58 @@ class Lens:
         "Normal : " + str(self.normal()) + "\n" + \
         "Diameter : " + str(self.diameter) + "\n" + \
         "Index of Refraction : " + str(self.indexOfRefraction) + "\n"
+
+class Aperture:
+    def __init__(self, ID, positionOfCM, yaw, pitch, diameter):
+        #ID of the flat mirror
+        self.ID = ID
+        #Position of the center of mass for which the flat mirror will rotate about for pitch and yaw adjustments
+        self.positionOfCM = positionOfCM
+        #Pitch of the flat mirror from (1,0,0) (pitch = polar rotation).
+        self.pitch = pitch
+        #Yaw of the flat mirror from (1,0,0) (yaw = axymuthal rotation)
+        self.yaw = yaw
+        #Diameter of the Lens
+        self.diameter = diameter
+    def normal(self):
+        return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
+    def vertex1(self):
+        return self.positionOfCM
+    def vertex(self):
+        return self.vertex1()
+    def copy(self):
+        return Aperture(ID = self.ID, positionOfCM = self.positionOfCM, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter)
+    def __str__(self):
+        return \
+        "ID : " + str(self.ID) + "\n" + \
+        "Position of Center of Mass : " + str(self.positionOfCM) + "\n" + \
+        "yaw : " + str(self.yaw) + "\n" + \
+        "Pitch : " + str(self.pitch) + "\n" + \
+        "Normal : " + str(self.normal()) + "\n" + \
+        "Diameter : " + str(self.diameter) + "\n"
+    
+class InfinitePlane:
+    def __init__(self, ID, positionOfCM, yaw, pitch):\
+        #ID of the flat mirror
+        self.ID = ID
+        #Position of the center of mass for which the flat mirror will rotate about for pitch and yaw adjustments
+        self.positionOfCM = positionOfCM
+        #Pitch of the flat mirror from (1,0,0) (pitch = polar rotation).
+        self.pitch = pitch
+        #Yaw of the flat mirror from (1,0,0) (yaw = axymuthal rotation)
+        self.yaw = yaw
+        def normal(self):
+            return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
+        def vertex1(self):
+            return self.positionOfCM
+        def vertex(self):
+            return self.vertex1()
+        def copy(self):
+            return InfinitePlane(ID = self.ID, positionOfCM = self.positionOfCM, yaw = self.yaw, pitch = self.pitch)
+        def __str__(self):
+            return \
+            "ID : " + str(self.ID) + "\n" + \
+            "Position of Center of Mass : " + str(self.positionOfCM) + "\n" + \
+            "yaw : " + str(self.yaw) + "\n" + \
+            "Pitch : " + str(self.pitch) + "\n" + \
+            "Normal : " + str(self.normal()) + "\n"
