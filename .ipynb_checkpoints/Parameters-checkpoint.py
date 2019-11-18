@@ -46,10 +46,12 @@ def elementsFromFile(filepath):
     elements = []
     elementNow = 'Element'+'{:02d}'.format(count)
     while elementNow in config:
+        
         if config[elementNow]['Type'] == 'Mirror':
             elements.append(Mirror(ID = config[elementNow]['ID'], radiusOfCurvature = eval(config[elementNow]['radiusOfCurvature']), positionOfCM = eval(config[elementNow]['positionOfCM']), parameter_d = eval(config[elementNow]['parameter_d']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter'])))
+            
         elif config[elementNow]['Type'] == 'Lens':
-            elements.append(Lens(ID = config[elementNow]['ID'], radiusOfCurvature = eval(config[elementNow]['radiusOfCurvature']), positionOfCM = eval(config[elementNow]['positionOfCM']), parameter_d = eval(config[elementNow]['parameter_d']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter']), indexOfRefraction = eval(config[elementNow]['indexOfRefraction'])))
+            elements.append(Lens(ID = config[elementNow]['ID'], radiusOfCurvature = eval(config[elementNow]['radiusOfCurvature']), positionOfCM = eval(config[elementNow]['positionOfCM']), parameter_d = eval(config[elementNow]['parameter_d']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter']), indexOfRefraction = eval(config[elementNow]['indexOfRefraction']), convergent = eval(config[elementNow]['convergent'])))
         
         count = count + 1
         elementNow = 'Element'+'{:02d}'.format(count)
