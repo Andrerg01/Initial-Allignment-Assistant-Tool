@@ -53,7 +53,7 @@ def rotatePitchYaw(vector, pitch, yaw):
 
 #Returns True of False if the beam will eventually collide with the optical element
 #This works for both lenses and mirrors    
-def intersectionBetweenLineAndSphere(directionOfLine, pointInLine, centerOfSphere, radiusOfSphere):
+def intersectionBetweenLineAndSphere(directionOfLine, pointInLine, centerOfSphere, radiusOfSphere, vertex):
     #Applying formula for intersection between line and sphere.
     l = directionOfLine
     o = pointInLine
@@ -65,15 +65,14 @@ def intersectionBetweenLineAndSphere(directionOfLine, pointInLine, centerOfSpher
         d1 = -(l.dot(o-c)) + np.sqrt((l.dot(o-c))**2 - (norm(o-c)**2-r**2))
         d2 = -(l.dot(o-c)) - np.sqrt((l.dot(o-c))**2 - (norm(o-c)**2-r**2))
         
-        if r >= 0:
-            #pick the greatest of the distances, which will also be the one that intersects the sphere form the inside, for a concave mirror (r>=0).
-            d = max([d1,d2])
+        intersection1 = o + d1*l
+        intersection2 = o + d2*l
+        
+        if norm(intersection1 - vertex) < norm(intersection2 - vertex):
+            return intersection1
         else:
-            #pick the smallest of the distances, which will also be the one that intersects the sphere form the outside, for a convex mirror (r<0).
-            d = min([d1,d2])
-        #The intersection point will be the line of the beam after travelling a distance d
-        intersection = o + d*l
-        return intersection
+            return intersection2
+        
     else:
         return None
 
@@ -162,7 +161,7 @@ class Beam:
     def refract(self, element):
         if isinstance(element, Lens):
             n1 = 1.0
-            n2 = 1.0*element.indexOfRefraction
+            n2 = element.indexOfRefraction
             k = n1/n2
             normal = normalize(element.center1() - self.position)
             thI = angleBetweenVectors(-1*self.direction, normal)
@@ -172,12 +171,13 @@ class Beam:
             q = 1.0/(1.0/q - (n2-n1)/abs(element.radiusOfCurvature))
             self.radiusOfCurvature = self.radiusFrom_q(q)
             self.width = self.widthFrom_q(q)
-            distanceToOtherSide = norm(self.position - intersectionBetweenLineAndSphere(self.direction, self.position, element.center2(), abs(element.radiusOfCurvature)))
+            distanceToOtherSide = norm(self.position - intersectionBetweenLineAndSphere(self.direction, self.position, element.center2(), abs(element.radiusOfCurvature)), element.vertex1())
             self.propagate(distanceToOtherSide)
             n1 = 1.0*element.indexOfRefraction
             n2 = 1.0
             k = n1/n2
             normal = -normalize(element.center2() - self.position)
+            thI = angleBetweenVectors(-1*self.direction, normal)
             self.direction = normalize(k*self.direction + (k*np.cos(thI)-np.sqrt(1.0-(k**2)*(1.0-np.cos(thI)**2.0)))*normal)
             self.indexOfRefraction = n2
             q = self.q()
@@ -186,13 +186,32 @@ class Beam:
             self.width = self.widthFrom_q(q)
         elif isinstance(element, ThinLens):
             pass
+        elif isinstance(element, WedgePolarizer):
+            n1 = 1.0
+            n2 = element.indexOfRefraction
+            k = n1/n2
+            normal = element.normal1()
+            thI = angleBetweenVectors(-1*self.direction, normal)
+            self.direction = normalize(k*self.direction + (k*np.cos(thI)-np.sqrt(1.0-(k**2)*(1.0-np.cos(thI)**2.0)))*normal)
+            self.indexOfRefraction = n2
+            distanceToOtherSide = norm(self.position - intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex2(), element.normal2()))
+            self.propagate(distanceToOtherSide)
+            n1 = element.indexOfRefraction
+            n2 = 1.0
+            k = n1/n2
+            normal = -element.normal2()
+            thI = angleBetweenVectors(-1*self.direction, normal)
+            self.direction = normalize(k*self.direction + (k*np.cos(thI)-np.sqrt(1.0-(k**2)*(1.0-np.cos(thI)**2.0)))*normal)
+            self.indexOfRefraction = 1.0
+            
+            
         
     #Returns True of False if the beam will eventually collide with the optical element
     #This works for both lenses and mirrors    
     def collisionQ(self, element):
         if isinstance(element, Mirror):
             #Applying formula for intersection between line and sphere.
-            intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
+            intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature, element.vertex1())
             #Intersection function will return None if there is no internsection
         elif isinstance(element, Lens):
             intersections = intersectionsBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
@@ -206,14 +225,13 @@ class Beam:
                     intersection = intersections[0]
                 else:
                     intersection = intersections[1]
-        elif isinstance(element, FlatMirror) or isinstance(element, InfinitePlane):
-            intersection = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex(), element.normal())
-            
+        elif isinstance(element, FlatMirror) or isinstance(element, InfinitePlane) or isinstance(element, Aperture) or isinstance(element, WedgePolarizer):
+            intersection = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex1(), element.normal1())
         if intersection is None:
             return False
-        #Makes sure the intersection point is withing the diameter of the element (not considering spherical caps here), and makes sure it is in front of the beam's path, not behind.
         if isinstance(element, InfinitePlane):
             return True
+        #Makes sure the intersection point is withing the diameter of the element (not considering spherical caps here), and makes sure it is in front of the beam's path, not behind.
         if norm(intersection - element.vertex1()) <= element.diameter/2.0: #and self.direction.dot(intersection - self.position) >= 0
             return True
             
@@ -224,7 +242,7 @@ class Beam:
     def collisionPoint(self, element):
         if isinstance(element, Mirror):
             #Applying formula for intersection between line and sphere.
-            intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
+            intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature, element.vertex1())
             #Intersection function will return None if there is no internsection
         elif isinstance(element, Lens):
             intersections = intersectionsBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
@@ -239,15 +257,15 @@ class Beam:
                 else:
                     intersection = intersections[1]
                 
-        elif isinstance(element, FlatMirror) or isinstance(element, InfinitePlane) or isinstance(element, Aperture) or isinstance(element, ThinLens):
-            intersection = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex(), element.normal())
+        elif isinstance(element, FlatMirror) or isinstance(element, InfinitePlane) or isinstance(element, Aperture) or isinstance(element, ThinLens) or isinstance(element, WedgePolarizer):
+            intersection = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex1(), element.normal1())
         if intersection is None:
             return False
         #Makes sure the intersection point is withing the diameter of the element (not considering spherical caps here), and makes sure it is in front of the beam's path, not behind.
         if isinstance(element, InfinitePlane) or norm(intersection - element.vertex1()) <= element.diameter/2 and self.direction.dot(intersection - self.position) >= 0:
             return intersection
         else:
-            return None
+            return False
 
     def clippingQ(self, element):
         if norm(element.vertex1() - self.position) + self.width > element.diameter/2.0:
@@ -263,15 +281,20 @@ class Beam:
                 normalToCollisionPoint = normalize(element.center1() - self.position)
                 self.reflect(normalToCollisionPoint)
                 q = self.q()
-                q = 1.0/(1.0/q - 2.0/element.radiusOfCurvature)
+                if element.concave:
+                    q = 1.0/(1.0/q - 2.0/element.radiusOfCurvature)
+                else:
+                    q = 1.0/(1.0/q + 2.0/element.radiusOfCurvature)
                 self.radiusOfCurvature = self.radiusFrom_q(q)
                 self.width = self.widthFrom_q(q)
-            elif isinstance(element, Lens):
+            elif isinstance(element, Lens) or isinstance(element, WedgePolarizer):
                 self.refract(element)
             elif isinstance(element, FlatMirror):
                 self.reflect(element.normal())
             elif isinstance(element, InfinitePlane):
                 self.reflect(element.normal())
+            elif isinstance(element, Aperture):
+                pass;
         else:
             if self.verbose: print("Cannot interact with element " + str(element.ID) + ", no collision detected!")
             self.interact(InfinitePlane(element.ID, element.vertex1(), element.yaw, element.pitch))
@@ -325,7 +348,7 @@ class Beam:
 #Class used for the interaction of the gaussian beam with mirror elements"""    
 class Mirror:
     #Initialization for the class
-    def __init__(self, ID, radiusOfCurvature, positionOfCM, parameter_d, yaw, pitch, diameter):
+    def __init__(self, ID, radiusOfCurvature, positionOfCM, parameter_d, yaw, pitch, diameter, concave):
         #ID of the mirror (for identification).
         self.ID = ID
         #Radius of curvatire of the mirror (2F).
@@ -340,17 +363,25 @@ class Mirror:
         self.yaw = yaw
         #Diameter of the mirror
         self.diameter = diameter
+        #Concavity or convexity of the mirror.
+        self.concave = concave
         
     #Return the position of the center of the sphere of which the mirror is a cap of (think of the mirror as a section of big sphere, this is the center of that sphere), the '1' is so the same function can also be called for lenses without having to test for the type beforehand.
     def center1(self):
-        return self.vertex1() + self.radiusOfCurvature*self.normal()
+        if self.concave:
+            return self.vertex1() + self.radiusOfCurvature*self.normal()
+        else:
+            return self.vertex1() - self.radiusOfCurvature*self.normal()
     
     def center(self):
         return self.center1()
     #Return the normal of the mirror given the pitch and yaw from (1,0,0)
     def normal(self):
         return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
-
+    
+    def normal1(self):
+        return self.normal()
+    
     #Returns the position of the actual vertex of the mirror, taking into account the deviation of it from the center of mass and yaw+pitch rotations, the '1' is so the same function can also be called for lenses without having to test for the type beforehand
     def vertex1(self):
         return self.positionOfCM + self.parameter_d*self.normal()
@@ -360,7 +391,7 @@ class Mirror:
     
     #Returns a copy of the mirror state as it is when the function is called
     def copy(self):
-        return Mirror(ID = self.ID, radiusOfCurvature = self.radiusOfCurvature, positionOfCM = self.positionOfCM, parameter_d = self.parameter_d, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter)
+        return Mirror(ID = self.ID, radiusOfCurvature = self.radiusOfCurvature, positionOfCM = self.positionOfCM, parameter_d = self.parameter_d, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter, concave = self.concave)
     
     #Nicely prints all the attributes of the mirror at the moment the function is called
     def __str__(self):
@@ -372,7 +403,8 @@ class Mirror:
         "yaw : " + str(self.yaw) + "\n" + \
         "Pitch : " + str(self.pitch) + "\n" + \
         "Normal : " + str(self.normal()) + "\n" + \
-        "Diameter : " + str(self.diameter) + "\n"    
+        "Diameter : " + str(self.diameter) + "\n" + \
+        "Concavity : " + str(self.concave) + "\n"
 
 class FlatMirror:
     def __init__(self, ID, positionOfCM, parameter_d, yaw, pitch, diameter):
@@ -390,6 +422,8 @@ class FlatMirror:
         self.diameter = diameter
     def normal(self):
         return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
+    def normal1(self):
+        return self.normal()
     def vertex1(self):
         return self.positionOfCM + self.parameter_d*self.normal()
     def vertex(self):
@@ -443,6 +477,9 @@ class Lens:
     #Return the normal of the lens given the pitch and yaw from (1,0,0)
     def normal(self):
         return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
+    
+    def normal1(self):
+        return self.norma()
     
     #Returns the position of the vertex of the lens where is normal is calculated from.
     def vertex1(self):
@@ -499,6 +536,9 @@ class ThinLens:
     def normal(self):
         return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
     
+    def normal1(self):
+        return self.normal()
+    
     #Returns the position of the vertex of the lens where is normal is calculated from.
     def vertex1(self):
         return self.positionOfCM + self.parameter_d*self.normal()
@@ -537,6 +577,8 @@ class Aperture:
         self.diameter = diameter
     def normal(self):
         return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
+    def normal1(self):
+        return self.normal()
     def vertex1(self):
         return self.positionOfCM
     def vertex(self):
@@ -564,6 +606,8 @@ class InfinitePlane:
         self.yaw = yaw
     def normal(self):
         return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
+    def normal1(self):
+        return self.normal()
     def vertex1(self):
         return self.positionOfCM
     def vertex(self):
@@ -577,3 +621,36 @@ class InfinitePlane:
         "yaw : " + str(self.yaw) + "\n" + \
         "Pitch : " + str(self.pitch) + "\n" + \
         "Normal : " + str(self.normal()) + "\n"
+    
+class WedgePolarizer:
+    def __init__(self, ID, positionOfCM, yaw, pitch, diameter, angle, minimumWidth, indexOfRefraction):
+        self.ID = ID
+        self.positionOfCM = positionOfCM
+        self.pitch = pitch
+        self.yaw = yaw
+        self.diameter = diameter
+        self.angle = angle
+        self.minimumWidth = minimumWidth
+        self.indexOfRefraction = indexOfRefraction
+    
+    def normal1(self):
+        return rotatePitchYaw(rotateYaw([1,0,0], np.pi-self.angle), self.pitch, self.yaw)
+    def normal2(self):
+        return rotatePitchYaw(rotateYaw([1,0,0], self.angle), self.pitch, self.yaw)
+    def vertex1(self):
+        return self.positionOfCM + self.minimumWidth/2.0*(1+np.sin(self.angle))*self.normal1()
+    def vertex2(self):
+        return self.positionOfCM + self.minimumWidth/2*(1+np.sin(self.angle))*self.normal2()
+    def copy(self):
+        return WedgePolarizer(ID = self.ID, positionOfCM = self.positionOfCM, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter, angle = self.angle, minimumWidth = self.minimumWidth, indexOfRefraction = self.indexOfRefraction)
+    def __str__(self):
+        return \
+        "ID : " + str(self.ID) + "\n" + \
+        "Position of Center of Mass : " + str(self.positionOfCM) + "\n" + \
+        "yaw : " + str(self.yaw) + "\n" + \
+        "Pitch : " + str(self.pitch) + "\n" + \
+        "Normal1 : " + str(self.normal1()) + "\n" + \
+        "Normal2 : " + str(self.normal2()) + "\n" + \
+        "Diameter : " + str(self.diameter) + "\n" + \
+        "Angle : " + str(self.angle) + "\n" + \
+        "Minimum Width : " + str(self.minimumWidth) + "\n"
