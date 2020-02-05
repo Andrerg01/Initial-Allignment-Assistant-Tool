@@ -1,0 +1,5 @@
+Steps to upload to git:
+
+git add --all
+git commit -m "nth commit"
+git push -u origin master

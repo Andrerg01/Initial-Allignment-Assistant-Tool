@@ -297,7 +297,8 @@ class Beam:
                 pass;
         else:
             if self.verbose: print("Cannot interact with element " + str(element.ID) + ", no collision detected!")
-            self.interact(InfinitePlane(element.ID, element.vertex1(), element.yaw, element.pitch))
+            if isinstance(element, Mirror) or isinstance(element, FlatMirror) or isinstance(element, WedgePolarizer):
+                self.interact(InfinitePlane(element.ID, element.vertex1(), element.yaw, element.pitch))
                 
     def track(self, elements, step):
         beam = self.copy()
@@ -623,7 +624,7 @@ class InfinitePlane:
         "Normal : " + str(self.normal()) + "\n"
     
 class WedgePolarizer:
-    def __init__(self, ID, positionOfCM, yaw, pitch, diameter, angle, minimumWidth, indexOfRefraction):
+    def __init__(self, ID, positionOfCM, yaw, pitch, diameter, angle, minimumWidth, indexOfRefraction, up):
         self.ID = ID
         self.positionOfCM = positionOfCM
         self.pitch = pitch
@@ -632,17 +633,30 @@ class WedgePolarizer:
         self.angle = angle
         self.minimumWidth = minimumWidth
         self.indexOfRefraction = indexOfRefraction
+        self.up = up
     
     def normal1(self):
-        return rotatePitchYaw(rotateYaw([1,0,0], np.pi-self.angle), self.pitch, self.yaw)
+        if self.up:
+            return rotatePitchYaw(rotateYaw([1,0,0], np.pi-self.angle/2.0), self.pitch, self.yaw)
+        else:
+            return rotatePitchYaw(rotateYaw([1,0,0], self.angle/2.0), self.pitch, self.yaw)
     def normal2(self):
-        return rotatePitchYaw(rotateYaw([1,0,0], self.angle), self.pitch, self.yaw)
+        if self.up:
+            return rotatePitchYaw(rotateYaw([1,0,0], self.angle/2.0), self.pitch, self.yaw)
+        else:
+            return rotatePitchYaw(rotateYaw([1,0,0], np.pi-self.angle/2.0), self.pitch, self.yaw)
     def vertex1(self):
-        return self.positionOfCM + self.minimumWidth/2.0*(1+np.sin(self.angle))*self.normal1()
+        if self.up:
+            return self.positionOfCM + self.minimumWidth/2.0*(1+np.sin(self.angle/2.0))*self.normal1()
+        else:
+            return self.positionOfCM + self.minimumWidth/2*(1+np.sin(self.angle/2.0))*self.normal2()
     def vertex2(self):
-        return self.positionOfCM + self.minimumWidth/2*(1+np.sin(self.angle))*self.normal2()
+        if self.up:
+            return self.positionOfCM + self.minimumWidth/2*(1+np.sin(self.angle/2.0))*self.normal2()
+        else:
+            return self.positionOfCM + self.minimumWidth/2.0*(1+np.sin(self.angle/2.0))*self.normal1()
     def copy(self):
-        return WedgePolarizer(ID = self.ID, positionOfCM = self.positionOfCM, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter, angle = self.angle, minimumWidth = self.minimumWidth, indexOfRefraction = self.indexOfRefraction)
+        return WedgePolarizer(ID = self.ID, positionOfCM = self.positionOfCM, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter, angle = self.angle, minimumWidth = self.minimumWidth, indexOfRefraction = self.indexOfRefraction, up = self.up)
     def __str__(self):
         return \
         "ID : " + str(self.ID) + "\n" + \
@@ -653,4 +667,5 @@ class WedgePolarizer:
         "Normal2 : " + str(self.normal2()) + "\n" + \
         "Diameter : " + str(self.diameter) + "\n" + \
         "Angle : " + str(self.angle) + "\n" + \
-        "Minimum Width : " + str(self.minimumWidth) + "\n"
+        "Minimum Width : " + str(self.minimumWidth) + \
+        "Up Orientation : " + str(self.up) + "\n"

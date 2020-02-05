@@ -59,7 +59,7 @@ def elementsFromFile(filepath):
             elements.append(Aperture(ID = config[elementNow]['ID'], positionOfCM = eval(config[elementNow]['positionOfCM']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter'])))
         
         elif config[elementNow]['Type'] == 'WedgePolarizer':
-            elements.append(WedgePolarizer(ID = config[elementNow]['ID'], positionOfCM = eval(config[elementNow]['positionOfCM']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter']), angle = eval(config[elementNow]['angle']), minimumWidth = eval(config[elementNow]['minimumWidth']), indexOfRefraction = eval(config[elementNow]['indexOfRefraction'])))
+            elements.append(WedgePolarizer(ID = config[elementNow]['ID'], positionOfCM = eval(config[elementNow]['positionOfCM']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter']), angle = eval(config[elementNow]['angle']), minimumWidth = eval(config[elementNow]['minimumWidth']), indexOfRefraction = eval(config[elementNow]['indexOfRefraction']), up = eval(config[elementNow]['up'])))
         
         count = count + 1
         elementNow = 'Element'+'{:02d}'.format(count)
