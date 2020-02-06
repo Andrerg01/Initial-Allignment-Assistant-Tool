@@ -210,8 +210,14 @@ class Beam:
     #This works for both lenses and mirrors    
     def collisionQ(self, element):
         if isinstance(element, Mirror):
+            apt = element.apertureObject().copy()
             #Applying formula for intersection between line and sphere.
-            intersection = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature, element.vertex1())
+            intersectionApt = intersectionBetweenLineAndPlane(self.direction, self.position, apt.vertex1(), apt.normal1())
+            intersectionMirr = intersectionBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature, element.vertex1())
+            if intersectionApt is None or intersectionMirr is None:
+                intersection = None
+            else:
+                intersection = intersectionMirr
             #Intersection function will return None if there is no internsection
         elif isinstance(element, Lens):
             intersections = intersectionsBetweenLineAndSphere(self.direction, self.position, element.center1(), element.radiusOfCurvature)
@@ -225,8 +231,19 @@ class Beam:
                     intersection = intersections[0]
                 else:
                     intersection = intersections[1]
-        elif isinstance(element, FlatMirror) or isinstance(element, InfinitePlane) or isinstance(element, Aperture) or isinstance(element, WedgePolarizer):
+                    
+        elif isinstance(element, FlatMirror):
+            apt = element.apertureObject().copy()
+            intersectionMirr = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex1(), element.normal1())
+            intersectionApt = intersectionBetweenLineAndPlane(self.direction, self.position, apt.vertex1(), apt.normal1())
+            if intersectionMirr is None or intersectionApt is None:
+                intersection = None
+            else:
+                intersection = intersectionMirr
+            
+        elif isinstance(element, InfinitePlane) or isinstance(element, Aperture) or isinstance(element, WedgePolarizer):
             intersection = intersectionBetweenLineAndPlane(self.direction, self.position, element.vertex1(), element.normal1())
+            
         if intersection is None:
             return False
         if isinstance(element, InfinitePlane):
@@ -328,9 +345,28 @@ class Beam:
         flags = []
         for element in elements:
             if beam.collisionQ(element):
-                beam.interact(element)
-                if beam.clippingQ(element):
-                    flags.append("Warning: Beam clipping with element " + str(element.ID))
+                if (isinstance(element, Mirror) or isinstance(element, FlatMirror)) and element.aperture:
+                    apt = element.apertureObject().copy()
+                    
+                    beamTemp = beam.copy()
+                    beamTemp.interact(apt)
+                    if beamTemp.clippingQ(apt):
+                        flags.append("Warning: Beam clipping with element " + str(apt.ID) + " In")
+
+                    beam.interact(element)
+                    if beam.clippingQ(element):
+                        flags.append("Warning: Beam clipping with element " + str(element.ID))
+
+                    beamTemp = beam.copy()
+                    beamTemp.interact(apt)
+                    if beamTemp.clippingQ(apt):
+                        flags.append("Warning: Beam clipping with element " + str(apt.ID) + " Out")
+        
+                else:
+                    beam.interact(element)
+                    if beam.clippingQ(element):
+                        flags.append("Warning: Beam clipping with element " + str(element.ID))
+        
             else:
                 flags.append("Error!: Beam not intersecting with element " + str(element.ID))
         return flags
@@ -349,7 +385,7 @@ class Beam:
 #Class used for the interaction of the gaussian beam with mirror elements"""    
 class Mirror:
     #Initialization for the class
-    def __init__(self, ID, radiusOfCurvature, positionOfCM, parameter_d, yaw, pitch, diameter, concave):
+    def __init__(self, ID, radiusOfCurvature, positionOfCM, parameter_d, yaw, pitch, diameter, concave, aperture = False, apertureDistance = 0, apertureDiameter = 0):
         #ID of the mirror (for identification).
         self.ID = ID
         #Radius of curvatire of the mirror (2F).
@@ -366,6 +402,12 @@ class Mirror:
         self.diameter = diameter
         #Concavity or convexity of the mirror.
         self.concave = concave
+        self.aperture = aperture
+        self.apertureDistance = apertureDistance
+        if aperture:
+            self.apertureDiameter = apertureDiameter
+        else:
+            self.apertureDiameter = diameter
         
     #Return the position of the center of the sphere of which the mirror is a cap of (think of the mirror as a section of big sphere, this is the center of that sphere), the '1' is so the same function can also be called for lenses without having to test for the type beforehand.
     def center1(self):
@@ -394,6 +436,9 @@ class Mirror:
     def copy(self):
         return Mirror(ID = self.ID, radiusOfCurvature = self.radiusOfCurvature, positionOfCM = self.positionOfCM, parameter_d = self.parameter_d, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter, concave = self.concave)
     
+    def apertureObject(self):
+        return Aperture(ID = self.ID + " - Aperture", positionOfCM = self.positionOfCM + self.apertureDistance*self.normal1(), pitch = self.pitch, yaw = self.yaw, diameter = self.apertureDiameter)
+    
     #Nicely prints all the attributes of the mirror at the moment the function is called
     def __str__(self):
         return \
@@ -408,7 +453,7 @@ class Mirror:
         "Concavity : " + str(self.concave) + "\n"
 
 class FlatMirror:
-    def __init__(self, ID, positionOfCM, parameter_d, yaw, pitch, diameter):
+    def __init__(self, ID, positionOfCM, parameter_d, yaw, pitch, diameter, aperture = False, apertureDistance = 0, apertureDiameter = 0):
         #ID of the flat mirror
         self.ID = ID
         #Position of the center of mass for which the flat mirror will rotate about for pitch and yaw adjustments
@@ -421,6 +466,12 @@ class FlatMirror:
         self.yaw = yaw
         #Diameter of the Lens
         self.diameter = diameter
+        self.aperture = aperture
+        self.apertureDistance = apertureDistance
+        if aperture:
+            self.apertureDiameter = apertureDiameter
+        else:
+            self.apertureDiameter = diameter
     def normal(self):
         return rotatePitchYaw([1,0,0], self.pitch, self.yaw)
     def normal1(self):
@@ -431,6 +482,9 @@ class FlatMirror:
         return self.vertex1()
     def copy(self):
         return FlatMirror(ID = self.ID, positionOfCM = self.positionOfCM, parameter_d = self.parameter_d, yaw = self.yaw, pitch = self.pitch, diameter = self.diameter)
+    def apertureObject(self):
+        return Aperture(ID = self.ID + " - Aperture", positionOfCM = self.positionOfCM + self.apertureDistance*self.normal1(), pitch = self.pitch, yaw = self.yaw, diameter = self.apertureDiameter)
+    
     def __str__(self):
         return \
         "ID : " + str(self.ID) + "\n" + \

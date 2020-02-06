@@ -47,13 +47,13 @@ def elementsFromFile(filepath):
     elementNow = 'Element'+'{:02d}'.format(count)
     while elementNow in config:
         if config[elementNow]['Type'] == 'Mirror':
-            elements.append(Mirror(ID = config[elementNow]['ID'], radiusOfCurvature = eval(config[elementNow]['radiusOfCurvature']), positionOfCM = eval(config[elementNow]['positionOfCM']), parameter_d = eval(config[elementNow]['parameter_d']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter']), concave = eval(config[elementNow]['concave'])))
+            elements.append(Mirror(ID = config[elementNow]['ID'], radiusOfCurvature = eval(config[elementNow]['radiusOfCurvature']), positionOfCM = eval(config[elementNow]['positionOfCM']), parameter_d = eval(config[elementNow]['parameter_d']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter']), concave = eval(config[elementNow]['concave']), aperture = eval(config[elementNow]['aperture']), apertureDistance = eval(config[elementNow]['apertureDistance']), apertureDiameter = eval(config[elementNow]['apertureDiameter'])))
             
         elif config[elementNow]['Type'] == 'Lens':
             elements.append(Lens(ID = config[elementNow]['ID'], radiusOfCurvature = eval(config[elementNow]['radiusOfCurvature']), positionOfCM = eval(config[elementNow]['positionOfCM']), parameter_d = eval(config[elementNow]['parameter_d']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter']), indexOfRefraction = eval(config[elementNow]['indexOfRefraction']), convergent = eval(config[elementNow]['convergent'])))
         
         elif config[elementNow]['Type'] == 'FlatMirror':
-            elements.append(FlatMirror(ID = config[elementNow]['ID'], positionOfCM = eval(config[elementNow]['positionOfCM']), parameter_d = eval(config[elementNow]['parameter_d']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter'])))
+            elements.append(FlatMirror(ID = config[elementNow]['ID'], positionOfCM = eval(config[elementNow]['positionOfCM']), parameter_d = eval(config[elementNow]['parameter_d']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter']), aperture = eval(config[elementNow]['aperture']), apertureDistance = eval(config[elementNow]['apertureDistance']), apertureDiameter = eval(config[elementNow]['apertureDiameter'])))
         
         elif config[elementNow]['Type'] == 'Aperture':
             elements.append(Aperture(ID = config[elementNow]['ID'], positionOfCM = eval(config[elementNow]['positionOfCM']), yaw = eval(config[elementNow]['yaw']), pitch = eval(config[elementNow]['pitch']), diameter = eval(config[elementNow]['diameter'])))
